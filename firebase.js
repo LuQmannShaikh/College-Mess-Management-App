@@ -2,27 +2,28 @@
    Firebase Configuration & Initialisation - Royal Mess
    ========================================================= */
 
-// 1. Firebase Console (https://console.firebase.google.com) se mili Web App Config Keys
+// Firebase Console se mili aapki Web App Config Keys
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyDBn5d__u-AZwsoXogynKk", 
+  authDomain: "college-mess-management.firebaseapp.com",
+  projectId: "college-mess-management",
+  storageBucket: "college-mess-management.appspot.com",
+  messagingSenderId: "995090725312",
+  appId: "1:995090725312:web:e67fd4b71", 
+  measurementId: "G-2H9M3LW54C"
 };
 
-// 2. Prevent Duplicate App Initializations
+// Prevent Duplicate App Initializations
 if (!firebase.apps.length) {
   firebase.initializeApp(firebaseConfig);
 } else {
   firebase.app(); // Existing instance use karein
 }
 
-// 3. Global Firestore Instance
+// Global Firestore Instance
 const db = firebase.firestore();
 
-// 4. Enable Offline Persistence
+// Enable Offline Persistence
 // Isse network slow ya disconnect hone par bhi scanner aur student pass ka local cache chalta rahega
 db.enablePersistence({ synchronizeTabs: true })
   .catch((err) => {

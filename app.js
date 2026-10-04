@@ -1,172 +1,240 @@
 /* =========================================================
-   Student App Logic - Royal Mess
+   Unified Single Page Mess App Logic (Royal Mess)
    ========================================================= */
 
-// Student Unique ID (Normally assigned or stored after login)
-const currentStudentId = localStorage.getItem("mess_student_id") || "STUDENT_101";
+let currentUser = null;
 
 document.addEventListener("DOMContentLoaded", () => {
-  // Save ID locally for persistent identity
-  localStorage.setItem("mess_student_id", currentStudentId);
-  
-  // 1. Generate Student QR Code
-  generateQRCode(currentStudentId);
+  // Set default today's date in Admin form
+  const today = new Date().toISOString().split('T')[0];
+  if(document.getElementById("aJoiningDate")) {
+    document.getElementById("aJoiningDate").value = today;
+  }
 
-  // 2. Fetch Profile & Payment Status from Database
-  loadStudentProfile(currentStudentId);
+  // Event Listeners
+  document.getElementById("studentLoginForm")?.addEventListener("submit", handleStudentLogin);
+  document.getElementById("adminLoginForm")?.addEventListener("submit", handleAdminLogin);
+  document.getElementById("addStudentFormAdmin")?.addEventListener("submit", addStudentAdmin);
 
-  // 3. Real-time Listener for Kitchen Refill Alerts
-  listenToKitchenStatus();
+  // Check saved session
+  const savedRole = localStorage.getItem("mess_role");
+  const savedPhone = localStorage.getItem("mess_phone");
+
+  if (savedRole === "admin") {
+    showScreen("adminDashboard");
+    loadAdminDashboard();
+  } else if (savedRole === "student" && savedPhone) {
+    loginStudentByPhone(savedPhone);
+  }
 });
 
-// 1. QR Code Generator Function
-function generateQRCode(studentId) {
-  const qrContainer = document.getElementById("qrcode");
-  const qrLoading = document.getElementById("qrLoading");
-
-  qrContainer.innerHTML = ""; // Clear existing QR canvas
-
-  new QRCode(qrContainer, {
-    text: studentId,
-    width: 160,
-    height: 160,
-    colorDark: "#1e1b4b", // Deep indigo color for high scanner contrast
-    colorLight: "#ffffff",
-    correctLevel: QRCode.CorrectLevel.H
+function showScreen(screenId) {
+  const screens = ["roleSelectionScreen", "studentLoginScreen", "adminLoginScreen", "studentDashboard", "adminDashboard"];
+  screens.forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.classList.add("hidden");
   });
-
-  // Hide loading spinner once rendered
-  if (qrLoading) {
-    qrLoading.classList.add("hidden");
-  }
+  document.getElementById(screenId)?.classList.remove("hidden");
 }
 
-// 2. Fetch Student Profile & Fee Status
-function loadStudentProfile(studentId) {
-  db.collection("users").doc(studentId).get().then(doc => {
-    if (doc.exists) {
-      const data = doc.data();
-      document.getElementById("userName").innerText = data.name || "Rahul Sharma";
-      document.getElementById("userPhone").innerText = data.phone || "+91 98765 43210";
-      
-      if (data.photo_url) {
-        document.getElementById("userPhoto").src = data.photo_url;
-      } else {
-        document.getElementById("userPhoto").src = `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name || 'Student')}&background=random&size=150`;
-      }
+/* --- STUDENT LOGIC --- */
+function handleStudentLogin(e) {
+  e.preventDefault();
+  const phone = document.getElementById("studentPhoneInput").value.trim();
+  if(!phone) return;
+  loginStudentByPhone(phone);
+}
 
-      // Check Payment Status (5th Date Rule)
-      const statusBadge = document.getElementById("statusBadge");
-      const todayDate = new Date().getDate();
-
-      if (!data.fees_paid && todayDate >= 5) {
-        statusBadge.innerText = "UNPAID";
-        statusBadge.className = "absolute -bottom-1 -right-2 bg-red-600 text-white text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider shadow-md border-2 border-white animate-pulse";
-      } else {
-        statusBadge.innerText = "PAID";
-        statusBadge.className = "absolute -bottom-1 -right-2 bg-green-500 text-white text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider shadow-md border-2 border-white";
-      }
-
-      // Highlight selected meal mode if already set
-      if (data.preferred_mode) {
-        highlightSelectedMeal(data.preferred_mode);
-      }
+function loginStudentByPhone(phone) {
+  db.collection("users").doc(phone).get().then(doc => {
+    if(doc.exists) {
+      currentUser = { id: doc.id, ...doc.data() };
+      localStorage.setItem("mess_role", "student");
+      localStorage.setItem("mess_phone", phone);
+      setupStudentDashboard();
+      showScreen("studentDashboard");
     } else {
-      // Default initial display if student doc doesn't exist yet
-      document.getElementById("userName").innerText = "Rahul Sharma";
-      document.getElementById("userPhone").innerText = "+91 98765 43210";
+      alert("Mobile number not registered by Mess Admin!");
     }
-  }).catch(err => {
-    console.error("Profile load error:", err);
-  });
+  }).catch(err => alert("Error logging in: " + err.message));
 }
 
-// 3. Set Meal Preference (Dine-In vs Tiffin)
-function setMealMode(mode) {
-  highlightSelectedMeal(mode);
+function setupStudentDashboard() {
+  document.getElementById("sNameDisplay").innerText = currentUser.name || "Student";
+  document.getElementById("sCycleDisplay").innerText = `Month Starts: ${currentUser.payment_date || 'N/A'}`;
 
-  const modeText = mode === 'DINE_IN' ? '🍽️ Dine-In' : '📦 Tiffin Pack';
-  
-  // Save selection directly to Firestore
-  db.collection("users").doc(currentStudentId).set({
-    preferred_mode: mode,
-    last_updated: firebase.firestore.FieldValue.serverTimestamp()
-  }, { merge: true }).then(() => {
-    showToast(`${modeText} selected for today!`, "✅");
-  }).catch(err => {
-    showToast("Failed to save selection", "❌");
-  });
+  // Smart Fee Payment Alerts Logic
+  checkFeeAlerts(currentUser);
 }
 
-// Highlight buttons visually on tap
-function highlightSelectedMeal(mode) {
-  const btnDineIn = document.getElementById("btnDineIn");
-  const btnTiffin = document.getElementById("btnTiffin");
+function checkFeeAlerts(user) {
+  const total = user.total_fee || 2200;
+  const paid = user.paid_amount || 0;
+  const due = total - paid;
 
-  if (mode === 'DINE_IN') {
-    btnDineIn.className = "group relative overflow-hidden p-4 rounded-2xl bg-indigo-600 border-2 border-indigo-600 text-white shadow-lg transition-all duration-200 active:scale-95 flex flex-col items-center gap-2";
-    btnDineIn.querySelector("span:nth-child(2)").className = "font-bold text-sm text-white";
-    btnDineIn.querySelector("span:nth-child(3)").className = "text-[10px] text-indigo-200 font-medium";
+  if (due <= 0) return; // No alert if fully paid
 
-    btnTiffin.className = "group relative overflow-hidden p-4 rounded-2xl bg-orange-50 border-2 border-transparent hover:border-orange-500 transition-all duration-200 active:scale-95 flex flex-col items-center gap-2";
-    btnTiffin.querySelector("span:nth-child(2)").className = "font-bold text-sm text-orange-900";
-    btnTiffin.querySelector("span:nth-child(3)").className = "text-[10px] text-orange-500 font-medium";
-  } else if (mode === 'TIFFIN') {
-    btnTiffin.className = "group relative overflow-hidden p-4 rounded-2xl bg-orange-500 border-2 border-orange-500 text-white shadow-lg transition-all duration-200 active:scale-95 flex flex-col items-center gap-2";
-    btnTiffin.querySelector("span:nth-child(2)").className = "font-bold text-sm text-white";
-    btnTiffin.querySelector("span:nth-child(3)").className = "text-[10px] text-orange-100 font-medium";
+  const startDate = new Date(user.payment_date || Date.now());
+  const today = new Date();
+  const diffDays = Math.floor((today - startDate) / (1000 * 60 * 60 * 24));
 
-    btnDineIn.className = "group relative overflow-hidden p-4 rounded-2xl bg-indigo-50 border-2 border-transparent hover:border-indigo-600 transition-all duration-200 active:scale-95 flex flex-col items-center gap-2";
-    btnDineIn.querySelector("span:nth-child(2)").className = "font-bold text-sm text-indigo-900";
-    btnDineIn.querySelector("span:nth-child(3)").className = "text-[10px] text-indigo-500 font-medium";
+  const isHalfPaid = paid >= (total / 2);
+  const alertThreshold = isHalfPaid ? 15 : 8; // 15 days if >= 50% paid, else 8 days
+
+  if (diffDays >= alertThreshold) {
+    const banner = document.getElementById("feeAlertBanner");
+    const text = document.getElementById("feeAlertText");
+    banner.classList.remove("hidden");
+    text.innerText = `Your pending fee is ₹${due}. Month cycle started ${diffDays} days ago. Please pay soon.`;
   }
 }
 
-// 4. Leave / Skip Meal Feature
-function toggleSkipMeal() {
-  const confirmSkip = confirm("✈️ Kya aap aaj ka khana skip kar rahe hain?\n\nIsse mess owner ko pata chal jayega aur ration waste nahi hoga.");
-  
-  if (confirmSkip) {
-    const todayStr = new Date().toISOString().split('T')[0];
+function setMealType(type) {
+  if(!currentUser) return;
+  db.collection("users").doc(currentUser.id).update({
+    preferred_mode: type,
+    last_updated: firebase.firestore.FieldValue.serverTimestamp()
+  }).then(() => alert(`Meal preference updated to: ${type}`));
+}
 
-    db.collection("skips").add({
-      student_id: currentStudentId,
-      date: todayStr,
-      timestamp: firebase.firestore.FieldValue.serverTimestamp()
-    }).then(() => {
-      showToast("Leave recorded! Owner notified.", "✈️");
-    }).catch(err => {
-      showToast("Error recording leave", "❌");
+function setTimeSlot(slot) {
+  if(!currentUser) return;
+  db.collection("users").doc(currentUser.id).update({
+    time_slot: slot
+  });
+}
+
+function submitAbsence() {
+  const from = document.getElementById("absentDateFrom").value;
+  const to = document.getElementById("absentDateTo").value;
+
+  if(!from || !to) {
+    alert("Please select both dates.");
+    return;
+  }
+
+  db.collection("users").doc(currentUser.id).update({
+    is_absent: true,
+    absent_from: from,
+    absent_to: to
+  }).then(() => alert("Leave request submitted successfully!"));
+}
+
+/* --- MARATHI ADMIN LOGIC --- */
+function handleAdminLogin(e) {
+  e.preventDefault();
+  const pass = document.getElementById("adminPassInput").value;
+  if(pass === "admin123") { // Change your secret admin password here
+    localStorage.setItem("mess_role", "admin");
+    showScreen("adminDashboard");
+    loadAdminDashboard();
+  } else {
+    alert("चुकीचा पासवर्ड! (Wrong Password)");
+  }
+}
+
+function loadAdminDashboard() {
+  db.collection("users").onSnapshot(snapshot => {
+    let total = snapshot.size;
+    let absent = 0;
+    let dineIn = 0;
+    let tiffin = 0;
+
+    const listContainer = document.getElementById("adminStudentList");
+    listContainer.innerHTML = "";
+
+    snapshot.forEach(doc => {
+      const d = doc.data();
+      const sId = doc.id;
+
+      if(d.is_absent) absent++;
+      if(d.preferred_mode === "Tiffin") tiffin++;
+      else dineIn++;
+
+      const isPaid = (d.due_amount <= 0);
+      const card = document.createElement("div");
+      card.className = "bg-slate-900 p-3 rounded-xl border border-slate-800 flex justify-between items-center text-xs";
+      card.innerHTML = `
+        <div>
+          <p class="font-bold text-white">${d.name || 'No Name'} <span class="${isPaid ? 'text-emerald-400' : 'text-red-400'}">(${isPaid ? 'Paid' : 'Unpaid'})</span></p>
+          <p class="text-slate-500">📞 ${d.phone} | Due: ₹${d.due_amount || 0}</p>
+        </div>
+        <div class="flex gap-1">
+          <button onclick="clearDuesAdmin('${sId}')" class="bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 px-2 py-1 rounded">Clear</button>
+          <button onclick="deleteStudentAdmin('${sId}')" class="bg-red-600/30 text-red-300 border border-red-500/40 px-2 py-1 rounded">✕</button>
+        </div>
+      `;
+      listContainer.appendChild(card);
+    });
+
+    document.getElementById("cntTotal").innerText = total;
+    document.getElementById("cntAbsent").innerText = absent;
+    document.getElementById("cntToCook").innerText = Math.max(0, total - absent);
+    document.getElementById("cntDineIn").innerText = dineIn;
+    document.getElementById("cntTiffin").innerText = tiffin;
+  });
+}
+
+function addStudentAdmin(e) {
+  e.preventDefault();
+  const name = document.getElementById("aName").value;
+  const phone = document.getElementById("aPhone").value;
+  const total = parseFloat(document.getElementById("aTotalFee").value);
+  const paid = parseFloat(document.getElementById("aPaidFee").value);
+  const date = document.getElementById("aJoiningDate").value;
+
+  const due = total - paid;
+
+  db.collection("users").doc(phone).set({
+    name: name,
+    phone: phone,
+    total_fee: total,
+    paid_amount: paid,
+    due_amount: due,
+    fees_paid: due <= 0,
+    payment_date: date,
+    preferred_mode: "Dine-In",
+    is_absent: false
+  }).then(() => {
+    alert("विद्यार्थी यशस्वीरित्या जोडला गेला!");
+    document.getElementById("addStudentFormAdmin").reset();
+  });
+}
+
+function clearDuesAdmin(id) {
+  if(confirm("या विद्यार्थ्याची फी पूर्ण जमा झाली आहे का?")) {
+    db.collection("users").doc(id).update({
+      paid_amount: 2200,
+      due_amount: 0,
+      fees_paid: true
     });
   }
 }
 
-// 5. Live Kitchen Status Listener
-function listenToKitchenStatus() {
-  db.collection("system").doc("status").onSnapshot(doc => {
-    const alertBox = document.getElementById("kitchenAlert");
-    if (doc.exists && doc.data().refill_paused) {
-      alertBox.classList.remove("hidden");
-    } else {
-      alertBox.classList.add("hidden");
-    }
-  });
+function deleteStudentAdmin(id) {
+  if(confirm("या विद्यार्थ्याचे नाव काढून टाकायचे का?")) {
+    db.collection("users").doc(id).delete();
+  }
 }
 
-// 6. Native-Style Toast Notification Helper
-function showToast(message, icon = "✅") {
-  const toast = document.getElementById("toastMessage");
-  const toastText = document.getElementById("toastText");
-  const toastIcon = document.getElementById("toastIcon");
-
-  toastText.innerText = message;
-  toastIcon.innerText = icon;
-
-  toast.classList.remove("opacity-0", "pointer-events-none");
-  toast.classList.add("toast-enter");
-
-  setTimeout(() => {
-    toast.classList.remove("toast-enter");
-    toast.classList.add("opacity-0", "pointer-events-none");
-  }, 3000);
+function publishNotice() {
+  const txt = document.getElementById("adminNoticeInput").value;
+  if(!txt) return;
+  document.getElementById("globalNoticeBar").classList.remove("hidden");
+  document.getElementById("noticeText").innerText = "📢 " + txt;
 }
+
+function shareWhatsAppGroup() {
+  const txt = document.getElementById("adminNoticeInput").value || "महत्वाची सूचना: मेस चालू राहील.";
+  window.open(`https://wa.me/?text=${encodeURIComponent(txt)}`, '_blank');
+}
+
+function closeNotice() {
+  document.getElementById("globalNoticeBar").classList.add("hidden");
+}
+
+function logout() {
+  localStorage.clear();
+  showScreen("roleSelectionScreen");
+}
+

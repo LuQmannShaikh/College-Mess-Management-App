@@ -1,0 +1,72 @@
+/* =========================================================
+   Custom CSS for Royal Mess App
+   ========================================================= */
+
+/* 1. Unpaid Student Alert Animation (Red Siren Effect) */
+@keyframes redSirenPulse {
+  0% { 
+    background-color: #ffffff; 
+    border-color: #ef4444; 
+    box-shadow: 0 0 15px rgba(239, 68, 68, 0.2); 
+  }
+  50% { 
+    background-color: #fef2f2; 
+    border-color: #b91c1c; 
+    box-shadow: 0 0 35px rgba(239, 68, 68, 0.7); 
+  }
+  100% { 
+    background-color: #ffffff; 
+    border-color: #ef4444; 
+    box-shadow: 0 0 15px rgba(239, 68, 68, 0.2); 
+  }
+}
+
+.unpaid-alert-card {
+  /* Ye class JS ke through tab lagegi jab fees due date (5 tarikh) cross ho jayegi */
+  animation: redSirenPulse 1s infinite ease-in-out !important;
+  border-width: 4px !important;
+}
+
+/* 2. QR Code Scanner Video Customization */
+/* HTML5-QRCode library by default ek basic video tag banati hai, hum use modern bana rahe hain */
+#reader video {
+  border-radius: 1rem;
+  object-fit: cover;
+  width: 100% !important;
+  /* Agar camera vertically stretch ho raha ho toh usko fix karta hai */
+}
+
+/* Hide default annoying borders from HTML5-QRCode library */
+#reader__dashboard_section_swaplink,
+#reader__dashboard_section_csr span {
+  text-decoration: none !important;
+  color: #818cf8 !important;
+  font-weight: bold;
+}
+
+/* 3. Toast Notification Animations (For Student App) */
+#toastMessage {
+  transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+.toast-enter {
+  opacity: 1 !important;
+  transform: translate(-50%, -20px) !important; /* Thoda upar slide hoga */
+}
+
+/* 4. Bottom Sheet Modal Animations (For Admin App) */
+/* Ye classes JS add karega smoothly modal open karne ke liye */
+.modal-bg-open {
+  display: flex !important;
+  opacity: 1 !important;
+}
+
+.modal-card-open {
+  transform: translateY(0) !important;
+}
+
+/* 5. Hide Scrollbar completely for Native App feel */
+::-webkit-scrollbar {
+  width: 0px;
+  background: transparent;
+}

@@ -2,14 +2,14 @@
    Firebase Configuration & Initialisation - Royal Mess
    ========================================================= */
 
-// Firebase Console se mili aapki Web App Config Keys
+// Aapki Final & Complete Firebase Keys
 const firebaseConfig = {
-  apiKey: "AIzaSyDBn5d__u-AZwsoXogynKk", 
+  apiKey: "AIzaSyDBn5d__u-AZwsoXogynKkBoO6R4bqwJUc",
   authDomain: "college-mess-management.firebaseapp.com",
   projectId: "college-mess-management",
-  storageBucket: "college-mess-management.appspot.com",
+  storageBucket: "college-mess-management.firebasestorage.app",
   messagingSenderId: "995090725312",
-  appId: "1:995090725312:web:e67fd4b71", 
+  appId: "1:995090725312:web:e67fd4b71a80ea16d97025",
   measurementId: "G-2H9M3LW54C"
 };
 
